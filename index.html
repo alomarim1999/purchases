@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>طلب المشتريات اليومي</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600&family=Reem+Kufi:wght@500;700&display=swap">
+<style>
+:root { color-scheme: light; }
+body { margin: 0; }
+[hidden] { display: none !important; }
+/* Layout: one narrow column like a kitchen order pad. Tab 1 is the pad being filled today, tab 2 is the stack of saved dockets, newest on top. */
+:root {
+--bg: #ECF0EC;
+--surface: #FAFBF9;
+--sunk: #E1E8E2;
+--ink: #16241D;
+--muted: #55665D;
+--line: #CDD7CF;
+--accent: #1C6A4C;
+--accent-ink: #FFFFFF;
+--accent-soft: #D7EADF;
+--crit: #A8261E;
+--crit-soft: #F6DCD8;
+--warn: #7C5200;
+--warn-soft: #F5E6C2;
+--ok: #1C6A4C;
+--ok-soft: #D7EADF;
+--display: "Reem Kufi", "IBM Plex Sans Arabic", "Segoe UI", Tahoma, sans-serif;
+--body: "IBM Plex Sans Arabic", "Segoe UI", Tahoma, Arial, sans-serif;
+--r: 10px;
+}
+@media (prefers-color-scheme: dark) {
+:root:not([data-theme="light"]) {
+--bg: #0F1512; --surface: #18211C; --sunk: #121A16; --ink: #E7EEE9; --muted: #9BABA2;
+--line: #2D3B34; --accent: #63C59C; --accent-ink: #0B1410; --accent-soft: #1D3329;
+--crit: #FF8F85; --crit-soft: #3F1D1A; --warn: #F0C264; --warn-soft: #3A2E12;
+--ok: #63C59C; --ok-soft: #1D3329;
+color-scheme: dark;
+}
+}
+:root[data-theme="dark"] {
+--bg: #0F1512; --surface: #18211C; --sunk: #121A16; --ink: #E7EEE9; --muted: #9BABA2;
+--line: #2D3B34; --accent: #63C59C; --accent-ink: #0B1410; --accent-soft: #1D3329;
+--crit: #FF8F85; --crit-soft: #3F1D1A; --warn: #F0C264; --warn-soft: #3A2E12;
+--ok: #63C59C; --ok-soft: #1D3329;
+color-scheme: dark;
+}
+*, *::before, *::after { box-sizing: border-box; }
+body {
+background: var(--bg);
+color: var(--ink);
+font-family: var(--body);
+font-size: 16px;
+line-height: 1.65;
+}
+.app {
+max-width: 720px;
+margin-inline: auto;
+padding-inline: 16px;
+padding-block: 28px 56px;
+display: flex;
+flex-direction: column;
+gap: 20px;
+}
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* Masthead */
+.mast { display: flex; flex-direction: column; gap: 4px; }
+.eyebrow { margin: 0; font-size: 13px; font-weight: 500; color: var(--accent); letter-spacing: 0; }
+.mast h1 {
+margin: 0;
+font-family: var(--display);
+font-weight: 700;
+font-size: clamp(28px, 7vw, 38px);
+line-height: 1.3;
+text-wrap: balance;
+}
+.lede { margin: 0; color: var(--muted); max-width: 52ch; }
+/* Tabs */
+.tabs { display: flex; gap: 4px; padding: 4px; background: var(--sunk); border-radius: var(--r); }
+.tab {
+flex: 1 1 0;
+min-width: 0;
+font: inherit;
+font-weight: 500;
+color: var(--muted);
+background: transparent;
+border: 0;
+border-radius: 7px;
+padding: 10px 12px;
+cursor: pointer;
+}
+.tab[aria-selected="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0, 0, 0, .12); }
+.tab .count { font-variant-numeric: tabular-nums; color: var(--accent); margin-inline-start: 6px; }
+.panel { display: flex; flex-direction: column; gap: 20px; }
+/* Blocks */
+.block {
+background: var(--surface);
+border: 1px solid var(--line);
+border-radius: var(--r);
+padding: 18px;
+display: flex;
+flex-direction: column;
+gap: 16px;
+}
+.block-title { margin: 0; font-family: var(--display); font-weight: 500; font-size: 20px; line-height: 1.4; }
+.block-note { margin: 0; color: var(--muted); font-size: 14px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.grid2 > * { min-width: 0; }
+@media (max-width: 480px) { .grid2.stack { grid-template-columns: 1fr; } }
+.field { display: flex; flex-direction: column; gap: 6px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.field > label, .field > legend { font-size: 14px; font-weight: 500; padding: 0; }
+.field > legend { margin-bottom: 6px; }
+.opt { color: var(--muted); font-weight: 400; }
+.input {
+width: 100%;
+font: inherit;
+color: var(--ink);
+background: var(--bg);
+border: 1px solid var(--line);
+border-radius: 8px;
+padding: 10px 12px;
+min-height: 46px;
+}
+.input::placeholder { color: var(--muted); opacity: .75; }
+.input:focus-visible { outline-offset: 0; border-color: var(--accent); }
+/* Stock-duration chips */
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { position: relative; cursor: pointer; }
+.chip input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
+.chip span {
+display: block;
+padding: 8px 14px;
+border: 1px solid var(--line);
+border-radius: 999px;
+background: var(--bg);
+font-size: 15px;
+font-weight: 500;
+white-space: nowrap;
+}
+.chip input:checked + span { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.chip input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+.custom-days { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+.custom-days label { font-size: 14px; }
+.custom-days .input { width: 110px; }
+/* Buttons */
+.btn {
+font: inherit;
+font-weight: 600;
+border-radius: 8px;
+border: 1px solid var(--line);
+background: var(--surface);
+color: var(--ink);
+padding: 10px 18px;
+min-height: 46px;
+cursor: pointer;
+}
+.btn:disabled { opacity: .55; cursor: default; }
+.btn-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn-small { min-height: 36px; padding: 5px 12px; font-size: 14px; font-weight: 500; }
+.btn-danger { color: var(--crit); }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.row .grow { flex: 1 1 200px; }
+.msg { margin: 0; font-size: 14px; }
+.msg.err { color: var(--crit); }
+.msg.good { color: var(--ok); font-weight: 500; }
+.notice {
+margin: 0;
+padding: 12px 14px;
+border-radius: 8px;
+background: var(--warn-soft);
+color: var(--warn);
+font-size: 14px;
+}
+/* Item rows (pad + dockets share them) */
+.items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; padding-block: 12px; border-top: 1px solid var(--line); }
+.item:first-child { border-top: 0; padding-top: 0; }
+.item:last-child { padding-bottom: 0; }
+.item-main { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.item-name { font-weight: 600; overflow-wrap: anywhere; }
+.item-qty { font-weight: 400; color: var(--muted); font-variant-numeric: tabular-nums; }
+.item-meta { font-size: 14px; color: var(--muted); overflow-wrap: anywhere; }
+.item-side { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+.item-actions { display: flex; gap: 6px; }
+.pill {
+display: inline-flex;
+align-items: center;
+gap: 6px;
+padding: 3px 10px;
+border-radius: 999px;
+font-size: 13px;
+font-weight: 600;
+white-space: nowrap;
+}
+.pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.pill.crit { background: var(--crit-soft); color: var(--crit); }
+.pill.warn { background: var(--warn-soft); color: var(--warn); }
+.pill.ok { background: var(--ok-soft); color: var(--ok); }
+.empty { margin: 0; padding: 18px; text-align: center; color: var(--muted); border: 1px dashed var(--line); border-radius: 8px; font-size: 15px; }
+.tally { margin: 0; font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.tally b { color: var(--ink); font-weight: 600; }
+.tally .u { color: var(--crit); font-weight: 600; }
+.copybox { display: flex; flex-direction: column; gap: 8px; }
+.copybox textarea { min-height: 150px; resize: vertical; font-size: 14px; line-height: 1.7; }
+/* Log */
+.today { display: flex; flex-wrap: wrap; gap: 10px 28px; align-items: baseline; }
+.today .stat { display: flex; flex-direction: column; }
+.today .num { font-family: var(--display); font-weight: 700; font-size: 30px; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.today .num.u { color: var(--crit); }
+.today .lab { font-size: 13px; color: var(--muted); }
+.dockets { display: flex; flex-direction: column; gap: 22px; }
+.docket {
+position: relative;
+background: var(--surface);
+border: 1px solid var(--line);
+border-top: 0;
+border-radius: 0 0 var(--r) var(--r);
+padding: 22px 18px 18px;
+display: flex;
+flex-direction: column;
+gap: 14px;
+}
+/* torn edge of an order slip */
+.docket::before {
+content: "";
+position: absolute;
+inset-inline: 0;
+top: -6px;
+height: 12px;
+background: radial-gradient(circle at 6px 6px, var(--bg) 5px, transparent 5.6px) 0 0 / 12px 12px repeat-x;
+}
+.docket-head { display: flex; flex-direction: column; gap: 2px; }
+.docket-date { margin: 0; font-family: var(--display); font-weight: 500; font-size: 19px; line-height: 1.4; }
+.docket-foot { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding-top: 12px; border-top: 1px dashed var(--line); }
+.docket-foot .ask { font-size: 14px; color: var(--crit); font-weight: 500; }
+@media (prefers-reduced-motion: no-preference) {
+.btn, .tab, .chip span { transition: background-color .12s, color .12s, border-color .12s; }
+}
+</style>
+</head>
+<body>
+<div class="app" dir="rtl" lang="ar">
+<header class="mast">
+<p class="eyebrow">المطعم · المشتريات</p>
+<h1>طلب المشتريات اليومي</h1>
+<p class="lede">موظف واحد يجمع طلبات كل الموظفين ويسجّلها هنا مرة واحدة في اليوم، مع المدة التي يكفيها المخزون الحالي من كل صنف.</p>
+</header>
+<div class="tabs" role="tablist" aria-label="أقسام الصفحة">
+<button class="tab" id="tabBtnForm" role="tab" type="button" aria-selected="true" aria-controls="panelForm">طلب اليوم<span class="count" id="draftCount"></span></button>
+<button class="tab" id="tabBtnLog" role="tab" type="button" aria-selected="false" aria-controls="panelLog">سجل الطلبات<span class="count" id="logCount"></span></button>
+</div>
+<!-- ================= طلب اليوم ================= -->
+<section class="panel" id="panelForm" role="tabpanel" aria-labelledby="tabBtnForm">
+<p class="notice" id="modeNotice" hidden></p>
+<div class="block">
+<h2 class="block-title">بيانات الطلب</h2>
+<div class="grid2 stack">
+<div class="field">
+<label for="collector">اسم الموظف المسؤول عن الحصر</label>
+<input class="input" id="collector" type="text" autocomplete="name" placeholder="اكتب اسمك" maxlength="60">
+</div>
+<div class="field">
+<label for="reqDate">تاريخ الطلب</label>
+<input class="input" id="reqDate" type="date">
+</div>
+</div>
+</div>
+<form class="block" id="itemForm" novalidate>
+<h2 class="block-title" id="itemFormTitle">إضافة صنف</h2>
+<div class="field">
+<label for="itemName">البضاعة المطلوبة</label>
+<input class="input" id="itemName" type="text" list="itemSuggest" autocomplete="off" placeholder="مثال: طماطم، زيت قلي، علب سفري" maxlength="80">
+<datalist id="itemSuggest"></datalist>
+</div>
+<div class="grid2">
+<div class="field">
+<label for="itemQty">الكمية <span class="opt">(اختياري)</span></label>
+<input class="input" id="itemQty" type="number" inputmode="decimal" min="0" step="any" placeholder="0">
+</div>
+<div class="field">
+<label for="itemUnit">الوحدة</label>
+<select class="input" id="itemUnit">
+<option>كيلو</option><option>كرتون</option><option>كيس</option><option>حبة</option>
+<option>علبة</option><option>ربطة</option><option>لتر</option><option>جالون</option>
+<option>درزن</option><option>صندوق</option>
+</select>
+</div>
+</div>
+<fieldset class="field" id="stockField">
+<legend>المخزون الموجود حالياً من هذا الصنف يكفي لمدة</legend>
+<div class="chips">
+<label class="chip"><input type="radio" name="stock" id="stock0" value="0"><span>خلص</span></label>
+<label class="chip"><input type="radio" name="stock" id="stockH" value="0.5"><span>اليوم فقط</span></label>
+<label class="chip"><input type="radio" name="stock" id="stock1" value="1"><span>يوم</span></label>
+<label class="chip"><input type="radio" name="stock" id="stock2" value="2"><span>يومين</span></label>
+<label class="chip"><input type="radio" name="stock" id="stock3" value="3"><span>3 أيام</span></label>
+<label class="chip"><input type="radio" name="stock" id="stock7" value="7"><span>أسبوع</span></label>
+<label class="chip"><input type="radio" name="stock" id="stockX" value="x"><span>مدة أخرى</span></label>
+</div>
+<div class="custom-days" id="customDaysWrap" hidden>
+<label for="customDays">عدد الأيام</label>
+<input class="input" id="customDays" type="number" inputmode="numeric" min="1" max="365" step="1" placeholder="5">
+</div>
+</fieldset>
+<div class="grid2 stack">
+<div class="field">
+<label for="itemBy">الموظف الذي طلبه <span class="opt">(اختياري)</span></label>
+<input class="input" id="itemBy" type="text" list="staffSuggest" autocomplete="off" placeholder="مثال: الشيف، الكاشير" maxlength="60">
+<datalist id="staffSuggest"></datalist>
+</div>
+<div class="field">
+<label for="itemNote">ملاحظة <span class="opt">(اختياري)</span></label>
+<input class="input" id="itemNote" type="text" autocomplete="off" placeholder="النوع أو الماركة أو الحجم" maxlength="120">
+</div>
+</div>
+<p class="msg err" id="itemErr" role="alert" hidden></p>
+<div class="row">
+<button class="btn btn-primary grow" id="addBtn" type="submit">أضف للقائمة</button>
+<button class="btn" id="cancelEditBtn" type="button" hidden>إلغاء التعديل</button>
+</div>
+</form>
+<div class="block">
+<div class="row" style="justify-content: space-between">
+<h2 class="block-title">قائمة طلب اليوم</h2>
+<p class="tally" id="draftTally"></p>
+</div>
+<p class="empty" id="draftEmpty">القائمة فارغة. أضف أول صنف من النموذج أعلاه، ثم كرّر لكل صنف يطلبه الموظفون.</p>
+<ul class="items" id="draftList"></ul>
+<p class="msg" id="saveMsg" role="status" hidden></p>
+<div class="row">
+<button class="btn btn-primary grow" id="saveBtn" type="button">حفظ الطلب في السجل</button>
+<button class="btn grow" id="copyBtn" type="button">نسخ الطلب للواتساب</button>
+</div>
+<div class="copybox" id="copyBox" hidden>
+<p class="block-note">تعذّر النسخ التلقائي. حدّد النص وانسخه يدوياً.</p>
+<textarea class="input" id="copyArea" readonly></textarea>
+</div>
+</div>
+</section>
+<!-- ================= السجل ================= -->
+<section class="panel" id="panelLog" role="tabpanel" aria-labelledby="tabBtnLog" hidden>
+<div class="block" id="todayBlock">
+<h2 class="block-title">طلبات اليوم</h2>
+<div class="today" id="todayStats">
+<p class="block-note" id="todayNote">جارٍ تحميل السجل…</p>
+</div>
+</div>
+<div class="row">
+<div class="field grow">
+<label for="logSearch">بحث في السجل</label>
+<input class="input" id="logSearch" type="search" placeholder="اسم صنف أو موظف" autocomplete="off">
+</div>
+</div>
+<p class="msg" id="logMsg" role="status" hidden></p>
+<p class="empty" id="logEmpty">جارٍ تحميل السجل…</p>
+<div class="dockets" id="logList"></div>
+</section>
+</div>
+<script>
+(function () {
+'use strict';
+document.documentElement.lang = 'ar';
+document.documentElement.dir = 'rtl';
+var $ = function (id) { return document.getElementById(id); };
+var LS_KEY = 'daily-purchase-draft-v1';
+var API = 'https://script.google.com/macros/s/AKfycbxreXAuAIrv-d2dfypRvqvChIq7jUFgsIE_olRmjsspzr_PycB0BPQ4spWK_345-hIetg/exec';
+function api(opts) {
+return fetch(opts.url, opts.init).then(function (r) { return r.json(); }).then(function (j) {
+if (!j || !j.ok) throw new Error((j && j.error) || '');
+return j;
+});
+}
+var state = {
+draft: { collector: '', date: '', items: [] },
+editing: -1,
+log: [],
+logReady: false,
+db: null,
+downloads: null,
+canWrite: null,      // true / false / null (not told)
+dbState: 'loading',  // loading | live | none
+confirmId: null,
+saving: false
+};
+/* ---------- helpers ---------- */
+function pad(n) { return (n < 10 ? '0' : '') + n; }
+function todayISO() {
+var d = new Date();
+return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+}
+var dateFmt = null;
+try { dateFmt = new Intl.DateTimeFormat('ar-KW-u-nu-latn', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }); } catch (e) {}
+function fmtDate(iso) {
+var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
+if (!m) return String(iso || 'بدون تاريخ');
+var d = new Date(+m[1], +m[2] - 1, +m[3]);
+if (dateFmt) { try { return dateFmt.format(d); } catch (e) {} }
+return m[3] + '/' + m[2] + '/' + m[1];
+}
+function fmtNum(n) {
+var x = Math.round(Number(n) * 1000) / 1000;
+return String(x);
+}
+function daysLabel(n) {
+n = Number(n);
+if (!(n > 0)) return 'خلص';
+if (n < 1) return 'اليوم فقط';
+if (n === 1) return 'يوم';
+if (n === 2) return 'يومين';
+if (n === 7) return 'أسبوع';
+if (n === 14) return 'أسبوعين';
+if (n >= 3 && n <= 10) return fmtNum(n) + ' أيام';
+return fmtNum(n) + ' يوم';
+}
+function unitWord(n) { return n === 1 ? 'صنف' : n === 2 ? 'صنفين' : (n >= 3 && n <= 10) ? 'أصناف' : 'صنف'; }
+function stockText(n) {
+n = Number(n);
+if (!(n > 0)) return 'المخزون خلص';
+return 'يكفي ' + daysLabel(n);
+}
+function urgency(n) {
+n = Number(n);
+if (!(n >= 1)) return 'crit';
+if (n <= 2) return 'warn';
+return 'ok';
+}
+function isUrgent(it) { return urgency(it.stock) === 'crit'; }
+function norm(s) { return String(s || '').trim().replace(/\s+/g, ' ').toLowerCase(); }
+function el(tag, cls, text) {
+var e = document.createElement(tag);
+if (cls) e.className = cls;
+if (text != null) e.textContent = text;
+return e;
+}
+function cleanItems(arr) {
+if (!Array.isArray(arr)) return [];
+var out = [];
+arr.forEach(function (it) {
+if (!it || typeof it !== 'object') return;
+var name = String(it.name == null ? '' : it.name).trim();
+if (!name) return;
+var q = Number(it.qty);
+out.push({
+name: name.slice(0, 80),
+qty: (it.qty === null || it.qty === '' || it.qty === undefined || !isFinite(q)) ? null : q,
+unit: String(it.unit || '').slice(0, 20),
+stock: isFinite(Number(it.stock)) ? Number(it.stock) : 0,
+by: String(it.by || '').trim().slice(0, 60),
+note: String(it.note || '').trim().slice(0, 120)
+});
+});
+return out;
+}
+function byUrgency(items) {
+return items.slice().sort(function (a, b) { return a.stock - b.stock; });
+}
+/* ---------- draft persistence (this device only) ---------- */
+function loadDraft() {
+var d = null;
+try { d = JSON.parse(localStorage.getItem(LS_KEY) || 'null'); } catch (e) { d = null; }
+if (d && typeof d === 'object') {
+state.draft.collector = String(d.collector || '');
+state.draft.items = cleanItems(d.items);
+state.draft.date = (state.draft.items.length && /^\d{4}-\d{2}-\d{2}$/.test(d.date || '')) ? d.date : todayISO();
+} else {
+state.draft.date = todayISO();
+}
+}
+function saveDraft() {
+try { localStorage.setItem(LS_KEY, JSON.stringify(state.draft)); } catch (e) {}
+}
+/* ---------- item row (shared by pad and dockets) ---------- */
+function itemRow(it, actions) {
+var li = el('li', 'item');
+var main = el('div', 'item-main');
+var name = el('div', 'item-name', it.name);
+if (it.qty !== null) {
+name.appendChild(document.createTextNode(' '));
+name.appendChild(el('span', 'item-qty', '· ' + fmtNum(it.qty) + ' ' + it.unit));
+}
+main.appendChild(name);
+var meta = [];
+if (it.by) meta.push('طلبه: ' + it.by);
+if (it.note) meta.push(it.note);
+if (meta.length) main.appendChild(el('div', 'item-meta', meta.join(' · ')));
+li.appendChild(main);
+var side = el('div', 'item-side');
+side.appendChild(el('span', 'pill ' + urgency(it.stock), stockText(it.stock)));
+if (actions) side.appendChild(actions);
+li.appendChild(side);
+return li;
+}
+/* ---------- pad (today's draft) ---------- */
+function renderDraft() {
+var items = state.draft.items;
+var list = $('draftList');
+list.textContent = '';
+items.forEach(function (it, i) {
+var acts = el('div', 'item-actions');
+var e = el('button', 'btn btn-small', 'تعديل');
+e.type = 'button';
+e.addEventListener('click', function () { startEdit(i); });
+var d = el('button', 'btn btn-small btn-danger', 'حذف');
+d.type = 'button';
+d.setAttribute('aria-label', 'حذف ' + it.name);
+d.addEventListener('click', function () { removeItem(i); });
+acts.appendChild(e); acts.appendChild(d);
+list.appendChild(itemRow(it, acts));
+});
+$('draftEmpty').hidden = items.length > 0;
+$('draftCount').textContent = items.length ? String(items.length) : '';
+var tally = $('draftTally');
+tally.textContent = '';
+if (items.length) {
+var u = items.filter(isUrgent).length;
+tally.appendChild(el('b', null, String(items.length)));
+tally.appendChild(document.createTextNode(' ' + unitWord(items.length)));
+if (u) {
+tally.appendChild(document.createTextNode(' · '));
+tally.appendChild(el('span', 'u', u + ' عاجل'));
+}
+}
+renderMode();
+}
+function renderMode() {
+var notice = $('modeNotice');
+var canSave = !!state.db && state.canWrite !== false;
+$('saveBtn').hidden = !canSave && state.dbState !== 'loading';
+$('saveBtn').disabled = state.saving || state.dbState === 'loading' || !state.draft.items.length;
+$('copyBtn').disabled = !state.draft.items.length;
+$('copyBtn').classList.toggle('btn-primary', !canSave && state.dbState !== 'loading');
+if (state.dbState === 'none') {
+notice.textContent = 'السجل غير متاح في هذا العرض. املأ الطلب كالمعتاد، ثم اضغط «نسخ الطلب للواتساب» وأرسله للمسؤول.';
+notice.hidden = false;
+} else if (state.dbState === 'live' && state.canWrite === false) {
+notice.textContent = 'الحفظ غير متاح الآن. املأ الطلب ثم انسخه وأرسله.';
+notice.hidden = false;
+} else {
+notice.hidden = true;
+}
+}
+function showItemErr(text) {
+var e = $('itemErr');
+e.textContent = text || '';
+e.hidden = !text;
+}
+function selectedStock() {
+var r = document.querySelector('input[name="stock"]:checked');
+if (!r) return { ok: false, msg: 'اختر المدة التي يكفيها المخزون الحالي من هذا الصنف.' };
+if (r.value === 'x') {
+var n = Number($('customDays').value);
+if (!(n >= 1) || n > 365) return { ok: false, msg: 'اكتب عدد الأيام (من 1 إلى 365).' };
+return { ok: true, v: Math.round(n) };
+}
+return { ok: true, v: Number(r.value) };
+}
+function resetItemForm(keepBy) {
+$('itemName').value = '';
+$('itemQty').value = '';
+$('itemNote').value = '';
+$('customDays').value = '';
+if (!keepBy) $('itemBy').value = '';
+var r = document.querySelector('input[name="stock"]:checked');
+if (r) r.checked = false;
+$('customDaysWrap').hidden = true;
+state.editing = -1;
+$('itemFormTitle').textContent = 'إضافة صنف';
+$('addBtn').textContent = 'أضف للقائمة';
+$('cancelEditBtn').hidden = true;
+showItemErr('');
+}
+function submitItem(ev) {
+ev.preventDefault();
+var name = $('itemName').value.trim().replace(/\s+/g, ' ');
+if (!name) { showItemErr('اكتب اسم البضاعة المطلوبة.'); $('itemName').focus(); return; }
+var dup = state.draft.items.findIndex(function (it, i) { return i !== state.editing && norm(it.name) === norm(name); });
+if (dup !== -1) { showItemErr('«' + name + '» موجود في القائمة. عدّله من القائمة بدل إضافته مرتين.'); return; }
+var qtyRaw = $('itemQty').value.trim();
+var qty = null;
+if (qtyRaw !== '') {
+qty = Number(qtyRaw);
+if (!isFinite(qty) || qty <= 0) { showItemErr('الكمية يجب أن تكون رقماً أكبر من صفر، أو اتركها فارغة.'); $('itemQty').focus(); return; }
+}
+var st = selectedStock();
+if (!st.ok) { showItemErr(st.msg); return; }
+var item = {
+name: name, qty: qty, unit: $('itemUnit').value, stock: st.v,
+by: $('itemBy').value.trim(), note: $('itemNote').value.trim()
+};
+if (state.editing >= 0) state.draft.items[state.editing] = item;
+else state.draft.items.push(item);
+saveDraft();
+resetItemForm(true);
+hideSaveMsg();
+renderDraft();
+$('itemName').focus();
+}
+function startEdit(i) {
+var it = state.draft.items[i];
+if (!it) return;
+state.editing = i;
+$('itemName').value = it.name;
+$('itemQty').value = it.qty === null ? '' : fmtNum(it.qty);
+$('itemUnit').value = it.unit;
+if ($('itemUnit').value !== it.unit) $('itemUnit').selectedIndex = 0;
+$('itemBy').value = it.by;
+$('itemNote').value = it.note;
+var preset = document.querySelector('input[name="stock"][value="' + String(it.stock) + '"]');
+if (preset) { preset.checked = true; $('customDaysWrap').hidden = true; }
+else { $('stockX').checked = true; $('customDaysWrap').hidden = false; $('customDays').value = fmtNum(it.stock); }
+$('itemFormTitle').textContent = 'تعديل صنف';
+$('addBtn').textContent = 'حفظ التعديل';
+$('cancelEditBtn').hidden = false;
+showItemErr('');
+$('itemForm').scrollIntoView({ block: 'start' });
+$('itemName').focus();
+}
+function removeItem(i) {
+state.draft.items.splice(i, 1);
+if (state.editing === i) resetItemForm(true);
+else if (state.editing > i) state.editing -= 1;
+saveDraft();
+renderDraft();
+}
+/* ---------- text for WhatsApp ---------- */
+function buildText(r) {
+var items = byUrgency(cleanItems(r.items));
+var lines = ['طلب مشتريات المطعم', 'التاريخ: ' + fmtDate(r.date), 'المسؤول عن الحصر: ' + (r.collector || 'غير مذكور'), ''];
+items.forEach(function (it, i) {
+var s = (i + 1) + '. ' + it.name;
+if (it.qty !== null) s += ' - ' + fmtNum(it.qty) + ' ' + it.unit;
+s += ' | ' + stockText(it.stock);
+if (it.by) s += ' | طلبه: ' + it.by;
+if (it.note) s += ' | ' + it.note;
+lines.push(s);
+});
+var u = items.filter(isUrgent).length;
+lines.push('', 'عدد الأصناف: ' + items.length + (u ? ' (منها ' + u + ' عاجل)' : ''));
+return lines.join('\n');
+}
+function copyText(text, onDone, onFail) {
+var p;
+try { p = navigator.clipboard.writeText(text); } catch (e) { p = Promise.reject(e); }
+p.then(onDone, onFail);
+}
+function showSaveMsg(text, kind) {
+var m = $('saveMsg');
+m.textContent = text;
+m.className = 'msg' + (kind ? ' ' + kind : '');
+m.hidden = false;
+}
+function hideSaveMsg() { $('saveMsg').hidden = true; $('copyBox').hidden = true; }
+function validateHeader() {
+if (!state.draft.items.length) { showSaveMsg('أضف صنفاً واحداً على الأقل قبل المتابعة.', 'err'); return false; }
+if (!state.draft.collector.trim()) { showSaveMsg('اكتب اسم الموظف المسؤول عن الحصر في أعلى الصفحة.', 'err'); $('collector').focus(); return false; }
+if (!/^\d{4}-\d{2}-\d{2}$/.test(state.draft.date)) { showSaveMsg('اختر تاريخ الطلب.', 'err'); $('reqDate').focus(); return false; }
+return true;
+}
+function onCopyDraft() {
+$('copyBox').hidden = true;
+if (!validateHeader()) return;
+var text = buildText(state.draft);
+copyText(text, function () {
+showSaveMsg('تم نسخ الطلب. افتح واتساب والصقه في المحادثة.', 'good');
+}, function () {
+$('copyArea').value = text;
+$('copyBox').hidden = false;
+$('copyArea').focus();
+$('copyArea').select();
+});
+}
+/* ---------- save to the shared log ---------- */
+function onSave() {
+hideSaveMsg();
+if (state.saving || !state.db) return;
+if (!validateHeader()) return;
+var items = cleanItems(state.draft.items);
+var doc = { date: state.draft.date, collector: state.draft.collector.trim().slice(0, 60), items: items };
+state.saving = true;
+$('saveBtn').textContent = 'جارٍ الحفظ…';
+renderMode();
+api({ url: API, init: { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(doc) } }).then(function () {
+state.draft.items = [];
+state.draft.date = todayISO();
+$('reqDate').value = state.draft.date;
+saveDraft();
+resetItemForm(false);
+state.saving = false;
+$('saveBtn').textContent = 'حفظ الطلب في السجل';
+renderDraft();
+showSaveMsg('تم حفظ الطلب: ' + items.length + ' ' + unitWord(items.length) + ' بتاريخ ' + fmtDate(doc.date) + '. تجده في «سجل الطلبات».', 'good');
+loadLog();
+}, function (e) {
+state.saving = false;
+$('saveBtn').textContent = 'حفظ الطلب في السجل';
+showSaveMsg('لم يُحفظ الطلب. ' + (e && e.message ? e.message + ' ' : '') + 'تحقق من الاتصال بالإنترنت ثم اضغط «حفظ» مرة أخرى. القائمة ما زالت على جهازك.', 'err');
+renderDraft();
+});
+}
+/* ---------- log ---------- */
+function logMsg(text, kind) {
+var m = $('logMsg');
+m.textContent = text || '';
+m.className = 'msg' + (kind ? ' ' + kind : '');
+m.hidden = !text;
+}
+function sortedLog() {
+return state.log.slice().sort(function (a, b) {
+if (a.date !== b.date) return a.date < b.date ? 1 : -1;
+return String(a.createdAt) < String(b.createdAt) ? 1 : -1;
+});
+}
+function matches(r, q) {
+if (!q) return true;
+if (norm(r.collector).indexOf(q) !== -1) return true;
+return r.items.some(function (it) {
+return norm(it.name).indexOf(q) !== -1 || norm(it.by).indexOf(q) !== -1 || norm(it.note).indexOf(q) !== -1;
+});
+}
+function stat(num, label, urgent) {
+var s = el('div', 'stat');
+s.appendChild(el('span', 'num' + (urgent ? ' u' : ''), String(num)));
+s.appendChild(el('span', 'lab', label));
+return s;
+}
+function renderToday() {
+var box = $('todayStats');
+box.textContent = '';
+if (state.dbState === 'loading') { box.appendChild(el('p', 'block-note', 'جارٍ تحميل السجل…')); return; }
+if (state.dbState === 'none') { box.appendChild(el('p', 'block-note', 'السجل غير متاح في هذا العرض.')); return; }
+var t = todayISO();
+var todays = state.log.filter(function (r) { return r.date === t; });
+if (!todays.length) {
+box.appendChild(el('p', 'block-note', 'لم يُسجَّل طلب بتاريخ اليوم (' + fmtDate(t) + ') بعد.'));
+return;
+}
+var n = 0, u = 0;
+todays.forEach(function (r) { n += r.items.length; u += r.items.filter(isUrgent).length; });
+box.appendChild(stat(n, unitWord(n) + ' في طلبات اليوم'));
+box.appendChild(stat(u, 'عاجل: خلص أو يكفي اليوم فقط', u > 0));
+box.appendChild(stat(todays.length, todays.length === 1 ? 'طلب مسجَّل' : 'طلبات مسجَّلة'));
+}
+function renderLog() {
+renderToday();
+var list = $('logList');
+var empty = $('logEmpty');
+list.textContent = '';
+$('logCount').textContent = state.log.length ? String(state.log.length) : '';
+if (state.dbState === 'loading') { empty.textContent = 'جارٍ تحميل السجل…'; empty.hidden = false; return; }
+if (state.dbState === 'none') { empty.textContent = 'السجل غير متاح في هذا العرض.'; empty.hidden = false; return; }
+if (!state.log.length) {
+empty.textContent = 'لا توجد طلبات محفوظة بعد. أول طلب يُحفظ من «طلب اليوم» يظهر هنا مع تاريخه واسم من سجّله.';
+empty.hidden = false;
+return;
+}
+var q = norm($('logSearch').value);
+var rows = sortedLog().filter(function (r) { return matches(r, q); });
+if (!rows.length) { empty.textContent = 'لا توجد نتائج مطابقة للبحث.'; empty.hidden = false; return; }
+empty.hidden = true;
+rows.forEach(function (r) {
+var card = el('article', 'docket');
+var head = el('div', 'docket-head');
+head.appendChild(el('h3', 'docket-date', fmtDate(r.date)));
+var u = r.items.filter(isUrgent).length;
+var t = el('p', 'tally');
+t.appendChild(document.createTextNode('حصر: '));
+t.appendChild(el('b', null, r.collector || 'غير مذكور'));
+t.appendChild(document.createTextNode(' · ' + r.items.length + ' ' + unitWord(r.items.length)));
+if (u) { t.appendChild(document.createTextNode(' · ')); t.appendChild(el('span', 'u', u + ' عاجل')); }
+head.appendChild(t);
+card.appendChild(head);
+var ul = el('ul', 'items');
+byUrgency(r.items).forEach(function (it) { ul.appendChild(itemRow(it, null)); });
+card.appendChild(ul);
+var foot = el('div', 'docket-foot');
+{
+var c = el('button', 'btn btn-small', 'نسخ');
+c.type = 'button';
+c.addEventListener('click', function () {
+var text = buildText(r);
+copyText(text, function () { logMsg('تم نسخ طلب ' + fmtDate(r.date) + '.', 'good'); },
+function () { logMsg('تعذّر النسخ التلقائي في هذا العرض.', 'err'); });
+});
+foot.appendChild(c);
+}
+card.appendChild(foot);
+list.appendChild(card);
+});
+}
+function refreshSuggestions() {
+var names = {}, staff = {};
+state.log.forEach(function (r) {
+r.items.forEach(function (it) {
+if (it.name) names[norm(it.name)] = it.name;
+if (it.by) staff[norm(it.by)] = it.by;
+});
+});
+function fill(dl, map) {
+dl.textContent = '';
+Object.keys(map).slice(0, 300).forEach(function (k) {
+var o = document.createElement('option');
+o.value = map[k];
+dl.appendChild(o);
+});
+}
+fill($('itemSuggest'), names);
+fill($('staffSuggest'), staff);
+}
+/* ---------- tabs ---------- */
+function showTab(which, focus) {
+var isLog = which === 'log';
+$('panelForm').hidden = isLog;
+$('panelLog').hidden = !isLog;
+$('tabBtnForm').setAttribute('aria-selected', String(!isLog));
+$('tabBtnLog').setAttribute('aria-selected', String(isLog));
+try { history.replaceState(null, '', isLog ? '#log' : '#form'); } catch (e) {}
+if (focus) (isLog ? $('tabBtnLog') : $('tabBtnForm')).focus();
+}
+/* ---------- log loading ---------- */
+function loadLog() {
+api({ url: API + '?action=log', init: {} }).then(function (res) {
+var list = res.log;
+state.dbState = 'live';
+state.log = (Array.isArray(list) ? list : []).map(function (x) {
+x = x || {};
+return { id: String(x.id || ''), date: String(x.date || ''), collector: String(x.collector || ''), items: cleanItems(x.items), createdAt: String(x.createdAt || '') };
+});
+logMsg('');
+refreshSuggestions();
+renderDraft();
+renderLog();
+}, function () {
+state.dbState = 'live';
+logMsg('تعذّر تحميل السجل. أعد تحميل الصفحة.', 'err');
+renderDraft();
+renderLog();
+});
+}
+function startDb() {
+if (!window.fetch) { state.dbState = 'none'; renderDraft(); renderLog(); return; }
+state.db = {};
+state.canWrite = true;
+loadLog();
+}
+/* ---------- boot ---------- */
+loadDraft();
+$('collector').value = state.draft.collector;
+$('reqDate').value = state.draft.date;
+$('collector').addEventListener('input', function () { state.draft.collector = this.value; saveDraft(); });
+$('reqDate').addEventListener('change', function () { state.draft.date = this.value; saveDraft(); });
+$('itemForm').addEventListener('submit', submitItem);
+$('cancelEditBtn').addEventListener('click', function () { resetItemForm(true); });
+Array.prototype.forEach.call(document.querySelectorAll('input[name="stock"]'), function (r) {
+r.addEventListener('change', function () {
+$('customDaysWrap').hidden = !$('stockX').checked;
+if ($('stockX').checked) $('customDays').focus();
+showItemErr('');
+});
+});
+$('saveBtn').addEventListener('click', onSave);
+$('copyBtn').addEventListener('click', onCopyDraft);
+$('logSearch').addEventListener('input', renderLog);
+$('tabBtnForm').addEventListener('click', function () { showTab('form'); });
+$('tabBtnLog').addEventListener('click', function () { showTab('log'); if (state.db) loadLog(); });
+document.querySelector('.tabs').addEventListener('keydown', function (e) {
+if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+showTab($('panelLog').hidden ? 'log' : 'form', true);
+e.preventDefault();
+}
+});
+showTab(location.hash === '#log' ? 'log' : 'form');
+renderDraft();
+renderLog();
+startDb();
+})();
+</script>
+</body>
+</html>
